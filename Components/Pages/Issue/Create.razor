@@ -1,0 +1,130 @@
+﻿@page "/issue/create"
+
+@using System.ComponentModel.DataAnnotations
+@using System.Net.Http
+@using System.Net
+@inject HttpClient Http
+@inject IJSRuntime JS
+@inject ILogger<Create> Logger
+@inject IConfiguration Configuration
+@inject PreferencesStoreClone Storage
+
+<EditForm Model="@model" OnValidSubmit="Submit">
+    <DataAnnotationsValidator />
+    <AntiforgeryToken />
+    @if (showAlert)
+    {
+        <MudAlert Severity="AlertType(response.IsSuccessStatusCode)" ContentAlignment="HorizontalAlignment.Center"
+            ShowCloseIcon="true" CloseIconClicked="(() => showAlert = false)">
+            @response
+        </MudAlert>
+    }
+    <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Stretch">
+        <MudButton ButtonType="ButtonType.Submit" Variant="Variant.Filled" Color="Color.Primary">Register</MudButton>
+        <MudButton ButtonType="ButtonType.Button" OnClick="Reset" Variant="Variant.Filled" Color="Color.Primary">Reset
+        </MudButton>
+    </MudStack>
+    <MudOverlay Visible="loading" DarkBackground="true" Absolute="true">
+        <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
+    </MudOverlay>
+    <MudTextField Label="Subject" @bind-Value="model!.Subject" For="@(() => model!.Subject)" Margin="Margin.Dense"/>
+    <MudTextField T="string" Label="Notes" Variant="Variant.Text" @bind-Value="model!.Notes" For="@(() => model!.Notes)"
+        Lines="5" Margin="Margin.Dense" />
+    <MudDateRangePicker @bind-DateRange="@model.DueDateRange" IconSize="Size.Small" Editable="false" Clearable="true"
+        Margin="Margin.Dense" DisableToolbar="true" PickerVariant="PickerVariant.Dialog" />
+    <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Stretch">
+        <MudSelect @bind-Value="model!.PriorityId" Dense="true" T="int" Label="Priority" Variant="Variant.Text" Margin="Margin.Dense">
+            @foreach (var priority in Enum.GetValues<Priorities>())
+            {
+                <MudSelectItem Value="@((int)priority)">@priority</MudSelectItem>
+            }
+        </MudSelect>
+        <MudSelect @bind-Value="model!.CategoryId" Dense="true" T="int?" Label="Category" Variant="Variant.Text" Margin="Margin.Dense">
+            <MudSelectItem T="int?" Value="null"></MudSelectItem>
+            @foreach (var category in Enum.GetValues<Categories>())
+            {
+                <MudSelectItem Value="@((int?)category)">@category</MudSelectItem>
+            }
+        </MudSelect>
+    </MudStack>
+    <MudButton ButtonType="ButtonType.Button" OnClick="AddSubTasks" Variant="Variant.Filled" Color="Color.Primary" Margin="Margin.Dense"
+        Class="mt-2">Add</MudButton>
+    @foreach (var subTask in model!.SubTasks)
+    {
+        <MudStack Row="true" Spacing="1" AlignItems="AlignItems.End">
+            <MudTextField @bind-Value="subTask!.Subject" Label="Subject" Margin="Margin.Dense"/>
+            <MudDateRangePicker @bind-DateRange="@subTask!.DueDateRange" IconSize="Size.Small" Editable="false" Margin="Margin.Dense"
+                Clearable="true" DisableToolbar="true" PickerVariant="PickerVariant.Dialog" />
+            <MudNumericField T="float?" Min="0" Step="0.25f" @bind-Value="subTask!.EstimatedHours" IconSize="Size.Small" Margin="Margin.Dense"/>
+        </MudStack>
+    }
+</EditForm>
+
+@code {
+    private CreateIssue? model { get; set; }
+    private bool loading = false;
+    private bool showAlert = false;
+    private HttpResponseMessage? response;
+
+    private Func<bool, Severity> AlertType = (sueccess) => sueccess ? Severity.Success : Severity.Error;
+
+    private void AddSubTasks() => model!.SubTasks.Add(new CreateIssue() { Uuid = Guid.NewGuid() });
+
+    private void Reset()
+    {
+        model = new()
+            {
+                StartDate = DateOnly.FromDateTime(DateTime.Today),
+                DueDate = DateOnly.FromDateTime(DateTime.Today),
+                PriorityId = (int)Priorities.Normal,
+                SubTasks = [new CreateIssue(), new CreateIssue(), new CreateIssue()]
+            };
+    }
+
+    protected override void OnInitialized()
+    {
+        Reset();
+    }
+
+    private async Task Submit()
+    {
+        Logger.LogInformation("Subject = {model}", model?.StartDate);
+        try
+        {
+            response = null;
+            loading = true;
+            showAlert = false;
+            var projectId = Storage.Get<string>(nameof(AppSettings.AppSettingKey.ProjectId));
+            //model!.ProjectId = projectId;
+            var url = $"projects/{projectId}/issues.json";
+            response = await Http.PostAsJsonAsync(url, new { issue = model });
+            if (!response.IsSuccessStatusCode)
+            {
+                return;
+            }
+            var createdIssue = await response.Content.ReadFromJsonAsync<CreatedIssue>();
+            foreach (var subTask in model!.SubTasks.Where(e => !String.IsNullOrEmpty(e.Subject)))
+            {
+                subTask.ParentIssueId = createdIssue!.Issue.Id;
+                subTask.PriorityId = createdIssue!.Issue.Priority!.Id;
+                subTask.StatusId = createdIssue!.Issue.Status.Id;
+                subTask.TrackerId = createdIssue!.Issue.Tracker.Id;
+                subTask.CategoryId = createdIssue!.Issue.Category?.Id ?? 0;
+                subTask.StartDate = subTask.StartDate ?? createdIssue!.Issue.StartDate;
+                subTask.DueDate = subTask.DueDate ?? createdIssue.Issue.DueDate;
+                response = await Http.PostAsJsonAsync(url, new { issue = subTask });
+                if (!response.IsSuccessStatusCode)
+                {
+                    return;
+                }
+            }
+            Reset();
+        }
+        finally
+        {
+            showAlert = true;
+            loading = false;
+        }
+    }
+
+}

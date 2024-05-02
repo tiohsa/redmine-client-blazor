@@ -1,0 +1,81 @@
+﻿@page "/config"
+
+@using System.ComponentModel.DataAnnotations
+@inject IJSRuntime JS
+@inject ILogger<AppSettings> Logger
+@inject IConfiguration Configuration
+@inject PreferencesStoreClone Storage
+@using RedmineClient.Models
+
+<EditForm Model="@model" OnValidSubmit="Submit">
+    <DataAnnotationsValidator />
+    <AntiforgeryToken />
+    <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Stretch">
+        <MudButton ButtonType="ButtonType.Submit" Variant="Variant.Filled" Color="Color.Primary" Class="mb-3" >Register</MudButton>
+    </MudStack>
+    <MudOverlay Visible="loading" DarkBackground="true" Absolute="true">
+        <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
+    </MudOverlay>
+    <MudPaper Class="pa-4" Elevation="0">
+        <MudText Typo="Typo.h6" Class="mb-2">Redmine</MudText>
+        <MudTextField Label="ProjectId" @bind-Value="model!.ProjectId" For="@(() => model!.ProjectId)" Margin="Margin.Dense"/>
+        <MudTextField Label="Url" @bind-Value="model!.Url" For="@(() => model!.Url)"  Margin="Margin.Dense"/>
+        <MudTextField Label="Token" @bind-Value="model!.Token" For="@(() => model!.Token)"  Margin="Margin.Dense"/>
+    </MudPaper>
+
+    <MudPaper Class="pa-4" Elevation="0">
+        <MudText Typo="Typo.h6" Class="mb-2">AI</MudText>
+        <MudTextField Label="Url" @bind-Value="model!.AIUrl"   Margin="Margin.Dense"/>
+        <MudTextField Label="Prompt" @bind-Value="model!.MetaPrompt" AutoGrow MaxLines="10" Margin="Margin.Dense"/>
+    </MudPaper>
+</EditForm>
+
+@if (showAlert)
+{
+    <MudAlert Severity="Severity.Success" ContentAlignment="HorizontalAlignment.Center" ShowCloseIcon="true"
+        CloseIconClicked="(() => showAlert = false)">
+        @response
+    </MudAlert>
+}
+
+@code {
+    private AppSettings? model { get; set; }
+
+    private bool loading = false;
+    private bool showAlert = false;
+    private string response = "";
+
+    protected override void OnInitialized() => model ??= new()
+        {
+            ProjectId = Storage.Get<string>(nameof(AppSettings.AppSettingKey.ProjectId)),
+            Url = Storage.Get<string>(nameof(AppSettings.AppSettingKey.Url)),
+            Token = Storage.Get<string>(nameof(AppSettings.AppSettingKey.Token)),
+            AIUrl = Storage.Get<string>(nameof(AppSettings.AppSettingKey.AIUrl)) ?? SkPhi.URL,
+            MetaPrompt = Storage.Get<string>(nameof(AppSettings.AppSettingKey.MetaPrompt)) ?? SkPhi.SK_PROMPT
+        };
+
+    private void Submit()
+    {
+        Logger.LogInformation("ProjectId = {ProjectId}", model!.ProjectId);
+        Logger.LogInformation("Url = {Url}", model.Url);
+        Logger.LogInformation("Token = {Token}", model.Token);
+
+        try
+        {
+            showAlert = false;
+            response = "";
+            loading = true;
+            Storage.Set(nameof(AppSettings.AppSettingKey.ProjectId), model.ProjectId);
+            Storage.Set(nameof(AppSettings.AppSettingKey.Url), model.Url);
+            Storage.Set(nameof(AppSettings.AppSettingKey.Token), model.Token);
+            Storage.Set(nameof(AppSettings.AppSettingKey.AIUrl), model.AIUrl);
+            Storage.Set(nameof(AppSettings.AppSettingKey.MetaPrompt), model.MetaPrompt);
+            response = "Resitered";
+            showAlert = true;
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+}

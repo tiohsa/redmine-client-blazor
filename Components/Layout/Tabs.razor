@@ -1,0 +1,36 @@
+﻿@page "/"
+
+<MudTabs  Rounded="true" ApplyEffectsToContainer="true" PanelClass="pa-6">
+  <MudTabPanel>
+    <ChildContent>
+        <RedmineClient.Components.Pages.Issue.Create/>
+    </ChildContent>
+    <TabContent>
+        Create
+    </TabContent>
+  </MudTabPanel>
+  <MudTabPanel>
+    <ChildContent>
+        <RedmineClient.Components.Pages.Issue.List/>
+    </ChildContent>
+    <TabContent>
+        List
+    </TabContent>
+  </MudTabPanel>
+  <MudTabPanel>
+    <ChildContent>
+        <RedmineClient.Components.Pages.Chat/>
+    </ChildContent>
+    <TabContent>
+        Chat
+    </TabContent>
+  </MudTabPanel>
+  <MudTabPanel>
+    <ChildContent>
+        <RedmineClient.Components.Pages.Config/>
+    </ChildContent>
+    <TabContent>
+        Config
+    </TabContent>
+  </MudTabPanel>
+</MudTabs>

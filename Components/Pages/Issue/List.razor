@@ -1,0 +1,160 @@
+﻿@page "/issue/list"
+
+@using System.Net.Http
+@using System.Net
+@using System.Web
+@inject HttpClient Http
+@inject ILogger<AppSettings> Logger
+@inject IConfiguration Configuration
+@inject PreferencesStoreClone Storage
+
+
+<MudOverlay Visible="loading" DarkBackground="true" Absolute="true">
+    <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
+</MudOverlay>
+
+<MudButton ButtonType="ButtonType.Button" OnClick="() => table.ReloadServerData()" Variant="Variant.Filled"
+    Color="Color.Primary" Class="mb-3">
+    Load
+</MudButton>
+
+<MudTable Hover="true" Dense="true" HorizontalScrollbar="true"
+    RowsPerPage="@pagePerPage"
+    ServerData="@(new Func<TableState, Task<TableData<Issue>>>(ServerReload))" @ref="table">
+    <HeaderContent>
+        <MudTh>
+            <MudTableSortLabel SortLabel="id" T="Issue">
+                #
+            </MudTableSortLabel>
+        </MudTh>
+        <MudTh>
+            <MudTableSortLabel SortLabel="subject" T="Issue">
+                Subject
+            </MudTableSortLabel>
+        </MudTh>
+        <MudTh>
+            <MudTableSortLabel SortLabel="priority" T="Issue">
+                Priority
+            </MudTableSortLabel>
+        </MudTh>
+        <MudTh>
+            <MudTableSortLabel SortLabel="category" T="Issue">
+                Category
+            </MudTableSortLabel>
+        </MudTh>
+        <MudTh>
+            <MudTableSortLabel SortLabel="due_date" T="Issue">
+                DueDate
+            </MudTableSortLabel>
+        </MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd DataLabel=" #">@context.Id</MudTd>
+        <MudTd DataLabel="Subject">
+            <MudLink Href="@context.TicketUrl()">
+                @context.Subject
+            </MudLink>
+        </MudTd>
+        <MudTd DataLabel="Priority" Style="@(PriorityColor(context.Priority.Id))">
+            @context.Priority?.Name
+        </MudTd>
+        <MudTd DataLabel="Category" Style="@(CategoryColor(context.Category?.Id))">
+            @context.Category?.Name
+            </MudTd>
+        <MudTd DataLabel="DueDate">@context.DueDate</MudTd>
+    </RowTemplate>
+    <NoRecordsContent>
+        <MudText>No matching records found</MudText>
+    </NoRecordsContent>
+    <LoadingContent>
+        <MudText>Loading...</MudText>
+    </LoadingContent>
+    <PagerContent>
+        <MudTablePager />
+    </PagerContent>
+</MudTable>
+
+@code {
+    private MudTable<Issue> table;
+
+    private IssueList? issueList;
+
+    private bool loading = false;
+
+    private int pagePerPage = 25;
+
+    private string PriorityColor(int priority) => priority switch
+    {
+        (int)Priorities.Immediate => $"color:white;background:{Colors.Red.Accent4}",
+        (int)Priorities.Urgent => $"color:white;background:{Colors.Red.Lighten1}",
+        (int)Priorities.High => $"background:{Colors.Red.Lighten4}",
+        (int)Priorities.Low => $"color:white;background:{Colors.Grey.Lighten1}",
+        _ => "",
+    };
+
+    private string CategoryColor(int? category) {
+        switch (category)
+        {
+            case > 0:
+                return $"color:white;background:{Colors.LightBlue.Darken1}";
+            default: 
+                return "";
+        }
+    }
+
+    private Func<bool, string> AlertType = (sueccess) => sueccess ? "alert-primary" : "alert-danger";
+
+    protected override void OnInitialized()
+    {
+        issueList ??= new IssueList();
+    }
+
+    private string? CreaetIssueOrder(string sortColumn, SortDirection direction)
+    {
+        var issueOrder = new List<string>();
+        var order = direction switch
+        {
+            SortDirection.Ascending => "asc",
+            SortDirection.Descending => "desc",
+            _ => "",
+        };
+        if (order is not ("" or null))
+        {
+            issueOrder.Add($"{sortColumn}:{order}");
+            return string.Join(",", issueOrder);
+        }
+        {
+            return null;
+        }
+    }
+
+
+    protected override async Task OnInitializedAsync()
+    {
+        await base.OnInitializedAsync();
+    }
+
+    private async Task<TableData<Issue>> ServerReload(TableState state)
+    {
+        try
+        {
+            loading = true;
+            var projectId = Storage.Get<string>(nameof(AppSettings.AppSettingKey.ProjectId));
+            var query = HttpUtility.ParseQueryString("");
+            query.Add("sort", CreaetIssueOrder(state.SortLabel, state.SortDirection) ?? "category:desc,due_date:asc,priority:desc");
+            query.Add("offset", $"{ state.Page * state.PageSize}");
+            query.Add("limit", $"{ state.PageSize }");
+            var url = $"projects/{projectId}/issues.json?{query.ToString()}";
+
+            issueList = await Http.GetFromJsonAsync<IssueList>(url.ToString());
+            issueList!.SetBaseUrl(Storage.Get<string>(nameof(AppSettings.AppSettingKey.Url)));
+            
+            return new TableData<Issue>() { TotalItems = issueList?.TotalCount ?? 0, Items = issueList?.Issues };
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+
+}

@@ -1,0 +1,135 @@
+﻿@page "/chart"
+
+@using System.Net.Http
+@using System.Net
+@using System.Web
+@inject ILogger<SkPhi> logger;
+@inject SkPhi skPhi;
+@inject IJSRuntime JSRuntime
+@inject IConfiguration Configuration
+@inject PreferencesStoreClone Storage
+
+<MudPaper Style="overflow-y: auto; margin-bottom: 50px;" Elevation="0" MinHeight="570px;">
+    @foreach (var context in promptMessages)
+    {
+        <MudCard Elevation="0">
+            <MudCardHeader Class="pa-2 mt-2">
+                <CardHeaderContent>
+                    <MudText Typo="@Typo.subtitle2">@context.Name</MudText>
+                </CardHeaderContent>
+                <CardHeaderAvatar>
+                    <MudAvatar Color="Color.Default" Size="Size.Small">
+                        @if (context.Name == PromptMessage.Target.You) {
+                            <MudIcon Icon
+                            ="@Icons.Material.Filled.Man" Color
+                            ="Color.Default" Size
+                            ="Size.Small" />
+                        }
+                        else {
+                            <MudIcon Icon
+                            ="@Icons.Material.Filled.Laptop" Color
+                            ="Color.Default" Size
+                            ="Size.Small" />
+                        }
+                    </MudAvatar>
+                </CardHeaderAvatar>
+            </MudCardHeader>
+            <MudCardContent Class="px-2 py-0">
+                @if(context.IsSuccess){
+                    <MudText>
+                        @context.Message
+                    </MudText>
+                } else {
+                    <MudAlert Severity="Severity.Error" Variant="Variant.Outlined">
+                       @context.Message
+                    </MudAlert>
+                }
+            </MudCardContent>
+        </MudCard>
+    }
+
+    @if(loading) {
+        <MudCard Elevation="0">
+            <MudCardHeader Class="pa-2 mt-2">
+                <CardHeaderContent>
+                    <MudText Typo="@Typo.subtitle2">@PromptMessage.Target.AI</MudText>
+                </CardHeaderContent>
+                <CardHeaderAvatar>
+                    <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Small" />
+                </CardHeaderAvatar>
+            </MudCardHeader>
+        </MudCard>
+    }
+</MudPaper>
+
+<div style="position: fixed; bottom: 0; width: 85%;">
+    <MudTextField T="string" Variant="Variant.Outlined" AutoGrow Lines="1" MaxLines="20" Disabled="loading"
+        @onkeydown="OnKeyDownHandler"
+        AutoFocus Style="z-index: 10; background: white;"
+        @ref="chatTextField"
+        Class="mb-2"
+        @bind-Value="userInput" OnAdornmentClick="() => Submit()" AdornmentIcon="@Icons.Material.Filled.Send" Adornment="Adornment.End" />
+</div>
+
+
+
+@code {
+    private MudTextField<string> chatTextField;
+
+    private bool loading = false;
+
+    private bool showAlert = false;
+
+    private string error = "";
+
+    private string userInput = "";
+
+    class PromptMessage
+    {
+        public enum Target
+        {
+            You,
+            AI,
+            None,
+        }
+        public Target Name{ get; set; }
+        public string Message { get; set; } = string.Empty;
+        public DateTime Time { get; set; }
+        public bool IsSuccess { get; set; } = true;
+    }
+    private List<PromptMessage> promptMessages = [];
+
+    private async Task OnKeyDownHandler(KeyboardEventArgs e)
+    {
+        // Ctrl+Enter の組み合わせをチェック
+        if (e.CtrlKey && e.Key == "Enter")
+        {
+            await Submit();
+        }
+    }
+
+    private async Task Submit()
+    {
+        try
+        {
+            loading = true;
+            promptMessages.Add(new PromptMessage {Name = PromptMessage.Target.You,  Message = userInput, Time = DateTime.Now, IsSuccess= true });
+
+            var url = Storage.Get<string>(nameof(AppSettings.AppSettingKey.AIUrl));
+            var skPrompt = Storage.Get<string>(nameof(AppSettings.AppSettingKey.MetaPrompt));
+            var response = await skPhi.Prompt(userInput, url, skPrompt);
+            promptMessages.Add(new PromptMessage { Name = PromptMessage.Target.AI, Message = response, Time = DateTime.Now, IsSuccess= true});
+            userInput = string.Empty;
+            await chatTextField.FocusAsync();
+            await JSRuntime.InvokeVoidAsync("setScrollPosition", "app", 9999999);
+        }catch(Exception e)
+        {
+            promptMessages.Add(new PromptMessage {Name = PromptMessage.Target.AI, Message = e.Message, Time = DateTime.Now, IsSuccess= false });
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+
+}
