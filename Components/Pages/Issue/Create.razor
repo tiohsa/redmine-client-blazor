@@ -3,6 +3,7 @@
 @using System.ComponentModel.DataAnnotations
 @using System.Net.Http
 @using System.Net
+@using System.Web
 @inject HttpClient Http
 @inject IJSRuntime JS
 @inject ILogger<Create> Logger
@@ -41,9 +42,9 @@
         </MudSelect>
         <MudSelect @bind-Value="model!.CategoryId" Dense="true" T="int?" Label="Category" Variant="Variant.Text" Margin="Margin.Dense">
             <MudSelectItem T="int?" Value="null"></MudSelectItem>
-            @foreach (var category in Enum.GetValues<Categories>())
+            @foreach (var category in issueCategories.Categories)
             {
-                <MudSelectItem Value="@((int?)category)">@category</MudSelectItem>
+                <MudSelectItem Value="@((int?)category.Id)">@category.Name</MudSelectItem>
             }
         </MudSelect>
     </MudStack>
@@ -62,6 +63,7 @@
 
 @code {
     private CreateIssue? model { get; set; }
+    private IssueCategories issueCategories { get; set; } = new IssueCategories();
     private bool loading = false;
     private bool showAlert = false;
     private HttpResponseMessage? response;
@@ -81,10 +83,29 @@
             };
     }
 
-    protected override void OnInitialized()
+    protected override async Task OnInitializedAsync()
     {
         Reset();
+        issueCategories = await GetCategories();
     }
+
+    private async Task<IssueCategories> GetCategories()
+    {
+        try
+        {
+            loading = true;
+            var projectId = Storage.Get<string>(nameof(AppSettings.AppSettingKey.ProjectId));
+            var url = $"projects/{projectId}/issue_categories.json";
+            var response = await Http.GetFromJsonAsync<IssueCategories>(url.ToString()) ?? new IssueCategories();
+            return response;
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+
+
 
     private async Task Submit()
     {

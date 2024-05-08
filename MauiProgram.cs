@@ -1,4 +1,5 @@
 ﻿using Microsoft.Extensions.Logging;
+using Microsoft.Maui.LifecycleEvents;
 using MudBlazor.Services;
 using RedmineClient.Models;
 
@@ -35,7 +36,6 @@ namespace RedmineClient
             builder.Logging.AddDebug();
 #endif
             builder.Services.AddMudServices();
-
 
             return builder.Build();
         }
